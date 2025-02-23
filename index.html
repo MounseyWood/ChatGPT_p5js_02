@@ -90,7 +90,7 @@
       button:hover {
         background: #666;
       }
-      /* Shading toggle (uses a checkbox already) */
+      /* Shading toggle (uses a checkbox) */
       #shadingToggleLabel {
         display: block;
         margin-top: 12px;
@@ -192,7 +192,7 @@
       <div class="parameter">
         <div class="paramHeader">
           <input type="checkbox" class="paramToggle" id="windToggle">
-          <span class="paramLabel">Wind: (X,Y,Z & Buffer)</span>
+          <span class="paramLabel">Wind: (X,Y,Z &amp; Buffer)</span>
         </div>
         <div id="windContainer" class="paramContainer">
           <label class="sliderLabel">Wind X: <span id="windXVal"></span></label>
@@ -224,46 +224,35 @@
         <input type="checkbox" id="shadingToggle" /> Shading Mode
       </label>
       
-      <p id="eduText">
-        <strong>Simulation Attributes:</strong><br>
-        • Damping: Energy loss (smooths motion).<br>
-        • Iterations: Constraint relaxations per frame.<br>
-        • Stretch: Cloth extension capability.<br>
-        • Shear: Resistance to diagonal distortion.<br>
-        • Bending: Resistance to sharp folds.<br>
-        • Weight & Gravity: Downward pull on the cloth.<br>
-        • Wind (X,Y,Z) & Buffer: 3D wind vector and multiplier.<br>
-        • Shading Mode: Fills cells with gray‑scale color based on vertical position.<br>
-        • Pinning Mode: “Top” vs. “Corners.”
-      </p>
-      
       <div class="bottomButtons">
         <button id="resetOrientationBtn">Reset Orientation</button>
         <button id="resetBtn">Reset Cloth</button>
       </div>
     </div>
     
-    <!-- Canvas Container -->
     <div id="canvasContainer"></div>
     
     <script>
-      // Global cloth configuration
+      /* =========================
+         Cloth Simulation Setup
+         ========================= */
+      
       let cols = 20, rows = 20, spacing = 20;
       let clothPoints = [], clothConstraints = [];
       let grid = [], horizontal = [], vertical = [], centers = [];
       
-      // Simulation parameters (default slider values)
+      // Current values for each parameter
       let damping = 0.98;
       let iterations = 5;
       let stretchFactor = 1.0;
       let shearFactor = 1.0;
       let bendingFactor = 1.0;
       let weight = 1.0;
-      let windX = 0.2, windY = 0.0, windZ = 0.1;
+      let windX = 0.2, windY = 0, windZ = 0.1;
       let windBuffer = 1.0;
       let gravity = 0.4;
       
-      // Baseline values when parameters are off
+      // Baseline (neutral) values if the parameter is toggled OFF
       const BASE_DAMPING = 1.0;
       const BASE_ITERATIONS = 1;
       const BASE_STRETCH = 1.0;
@@ -274,7 +263,7 @@
       const BASE_WINDBUFFER = 1.0;
       const BASE_GRAVITY = 0.0;
       
-      // Flags for each parameter (off by default)
+      // Toggles for each parameter (off by default)
       let dampingOn = false;
       let iterationsOn = false;
       let stretchOn = false;
@@ -284,17 +273,21 @@
       let windOn = false;
       let gravityOn = false;
       
-      // Pinning mode (radio: "top" or "corners")
+      // Pinning mode: "top" or "corners"
       let pinningMode = "top";
       
-      // Horizontal cloth shift
+      // Shift the cloth horizontally
       let clothShiftX = -40;
       
-      // Shading mode toggle
+      // Shading mode
       let shadingMode = false;
       
-      // Orientation reset flag
+      // For orientation reset
       let doResetOrientation = false;
+      
+      // Collision parameters
+      let collisionThreshold = spacing * 0.5;
+      let repulsionFactor = 0.5;
       
       function setup() {
         let cnv = createCanvas(windowWidth - 280, windowHeight, WEBGL);
@@ -304,14 +297,143 @@
         setupCloth();
       }
       
-      // Utility: Attach change event to a parameter toggle checkbox
-      function attachToggle(toggleId, containerId, flagSetter) {
+      /* =========================
+         UI Creation
+         ========================= */
+      
+      function createUI() {
+        // Buttons
+        select("#resetBtn").mousePressed(setupCloth);
+        select("#resetOrientationBtn").mousePressed(() => {
+          doResetOrientation = true;
+        });
+        
+        // Pinning Mode Radio
+        let pinRadio = createRadio();
+        pinRadio.option("top", "Top Pinned");
+        pinRadio.option("corners", "Corner Pinned");
+        pinRadio.selected("top");
+        pinRadio.parent("pinningRadio");
+        pinRadio.changed(() => {
+          pinningMode = pinRadio.value();
+        });
+        
+        // Attach toggles for each parameter
+        attachToggle("dampingToggle", "dampingContainer", (s) => { dampingOn = s; });
+        attachToggle("iterationsToggle", "iterationsContainer", (s) => { iterationsOn = s; });
+        attachToggle("stretchToggle", "stretchContainer", (s) => { stretchOn = s; });
+        attachToggle("shearToggle", "shearContainer", (s) => { shearOn = s; });
+        attachToggle("bendingToggle", "bendingContainer", (s) => { bendingOn = s; });
+        attachToggle("weightToggle", "weightContainer", (s) => { weightOn = s; });
+        attachToggle("windToggle", "windContainer", (s) => { windOn = s; });
+        attachToggle("gravityToggle", "gravityContainer", (s) => { gravityOn = s; });
+        
+        // Sliders
+        const dampingSl = createSlider(0.90, 1.0, 0.98, 0.01)
+          .parent("dampingSlider")
+          .input(() => {
+            damping = dampingSl.value();
+            select("#dampingVal").html(nf(damping, 1, 2));
+          });
+        select("#dampingVal").html(nf(damping, 1, 2));
+        
+        const iterSl = createSlider(1, 10, 5, 1)
+          .parent("iterationsSlider")
+          .input(() => {
+            iterations = iterSl.value();
+            select("#iterationsVal").html(iterations);
+          });
+        select("#iterationsVal").html(iterations);
+        
+        const stretchSl = createSlider(0.8, 1.2, 1.0, 0.01)
+          .parent("stretchSlider")
+          .input(() => {
+            stretchFactor = stretchSl.value();
+            select("#stretchVal").html(nf(stretchFactor, 1, 2));
+          });
+        select("#stretchVal").html(nf(stretchFactor, 1, 2));
+        
+        const shearSl = createSlider(0.8, 1.2, 1.0, 0.01)
+          .parent("shearSlider")
+          .input(() => {
+            shearFactor = shearSl.value();
+            select("#shearVal").html(nf(shearFactor, 1, 2));
+          });
+        select("#shearVal").html(nf(shearFactor, 1, 2));
+        
+        const bendSl = createSlider(0.8, 1.2, 1.0, 0.01)
+          .parent("bendingSlider")
+          .input(() => {
+            bendingFactor = bendSl.value();
+            select("#bendingVal").html(nf(bendingFactor, 1, 2));
+          });
+        select("#bendingVal").html(nf(bendingFactor, 1, 2));
+        
+        const weightSl = createSlider(0.5, 2.0, 1.0, 0.1)
+          .parent("weightSlider")
+          .input(() => {
+            weight = weightSl.value();
+            select("#weightVal").html(nf(weight, 1, 2));
+          });
+        select("#weightVal").html(nf(weight, 1, 2));
+        
+        // Wind & Buffer
+        const windXSl = createSlider(-1, 1, 0.2, 0.01)
+          .parent("windXSlider")
+          .input(() => {
+            windX = windXSl.value();
+            select("#windXVal").html(nf(windX, 1, 2));
+          });
+        select("#windXVal").html(nf(windX, 1, 2));
+        
+        const windYSl = createSlider(-1, 1, 0, 0.01)
+          .parent("windYSlider")
+          .input(() => {
+            windY = windYSl.value();
+            select("#windYVal").html(nf(windY, 1, 2));
+          });
+        select("#windYVal").html(nf(windY, 1, 2));
+        
+        const windZSl = createSlider(-1, 1, 0.1, 0.01)
+          .parent("windZSlider")
+          .input(() => {
+            windZ = windZSl.value();
+            select("#windZVal").html(nf(windZ, 1, 2));
+          });
+        select("#windZVal").html(nf(windZ, 1, 2));
+        
+        const windBufSl = createSlider(0, 2, 1.0, 0.01)
+          .parent("windBufSlider")
+          .input(() => {
+            windBuffer = windBufSl.value();
+            select("#windBufVal").html(nf(windBuffer, 1, 2));
+          });
+        select("#windBufVal").html(nf(windBuffer, 1, 2));
+        
+        const gravSl = createSlider(0, 1, 0.4, 0.01)
+          .parent("gravitySlider")
+          .input(() => {
+            gravity = gravSl.value();
+            select("#gravityVal").html(nf(gravity, 1, 2));
+          });
+        select("#gravityVal").html(nf(gravity, 1, 2));
+        
+        // Shading toggle
+        const shadingToggle = select("#shadingToggle");
+        shadingToggle.changed(() => {
+          shadingMode = shadingToggle.elt.checked;
+        });
+      }
+      
+      // Attach a checkbox that toggles the container's visibility
+      function attachToggle(toggleId, containerId, setFlag) {
         let checkbox = select("#" + toggleId);
         let container = select("#" + containerId);
+        // Default is unchecked => container hidden
         checkbox.changed(() => {
-          let state = checkbox.elt.checked;
-          flagSetter(state);
-          if (state) {
+          let checked = checkbox.elt.checked;
+          setFlag(checked);
+          if (checked) {
             container.style("display", "block");
           } else {
             container.style("display", "none");
@@ -319,97 +441,9 @@
         });
       }
       
-      function createUI() {
-        // Reset Cloth button
-        select("#resetBtn").mousePressed(setupCloth);
-        // Reset Orientation button
-        select("#resetOrientationBtn").mousePressed(() => { doResetOrientation = true; });
-      
-        // Pinning mode radio buttons (keep these as radio)
-        let pinRadio = createRadio();
-        pinRadio.option("top", "Top Pinned");
-        pinRadio.option("corners", "Corner Pinned");
-        pinRadio.selected("top");
-        pinRadio.parent("pinningRadio");
-        pinRadio.changed(() => { pinningMode = pinRadio.value(); });
-      
-        // For each parameter, attach a toggle that shows/hides the slider container.
-        attachToggle("dampingToggle", "dampingContainer", (state) => { dampingOn = state; });
-        attachToggle("iterationsToggle", "iterationsContainer", (state) => { iterationsOn = state; });
-        attachToggle("stretchToggle", "stretchContainer", (state) => { stretchOn = state; });
-        attachToggle("shearToggle", "shearContainer", (state) => { shearOn = state; });
-        attachToggle("bendingToggle", "bendingContainer", (state) => { bendingOn = state; });
-        attachToggle("weightToggle", "weightContainer", (state) => { weightOn = state; });
-        attachToggle("windToggle", "windContainer", (state) => { windOn = state; });
-        attachToggle("gravityToggle", "gravityContainer", (state) => { gravityOn = state; });
-      
-        // Damping slider
-        const dampingSl = createSlider(0.90, 1.0, 0.98, 0.01)
-          .parent("dampingSlider")
-          .input(() => { damping = dampingSl.value(); select("#dampingVal").html(nf(damping, 1, 2)); });
-        select("#dampingVal").html(nf(damping, 1, 2));
-      
-        // Iterations slider
-        const iterSl = createSlider(1, 10, 5, 1)
-          .parent("iterationsSlider")
-          .input(() => { iterations = iterSl.value(); select("#iterationsVal").html(iterations); });
-        select("#iterationsVal").html(iterations);
-      
-        // Stretch slider
-        const stretchSl = createSlider(0.8, 1.2, 1.0, 0.01)
-          .parent("stretchSlider")
-          .input(() => { stretchFactor = stretchSl.value(); select("#stretchVal").html(nf(stretchFactor, 1, 2)); });
-        select("#stretchVal").html(nf(stretchFactor, 1, 2));
-      
-        // Shear slider
-        const shearSl = createSlider(0.8, 1.2, 1.0, 0.01)
-          .parent("shearSlider")
-          .input(() => { shearFactor = shearSl.value(); select("#shearVal").html(nf(shearFactor, 1, 2)); });
-        select("#shearVal").html(nf(shearFactor, 1, 2));
-      
-        // Bending slider
-        const bendSl = createSlider(0.8, 1.2, 1.0, 0.01)
-          .parent("bendingSlider")
-          .input(() => { bendingFactor = bendSl.value(); select("#bendingVal").html(nf(bendingFactor, 1, 2)); });
-        select("#bendingVal").html(nf(bendingFactor, 1, 2));
-      
-        // Weight slider
-        const weightSl = createSlider(0.5, 2.0, 1.0, 0.1)
-          .parent("weightSlider")
-          .input(() => { weight = weightSl.value(); select("#weightVal").html(nf(weight, 1, 2)); });
-        select("#weightVal").html(nf(weight, 1, 2));
-      
-        // Wind sliders and buffer (grouped together)
-        const windXSl = createSlider(-1, 1, 0.2, 0.01)
-          .parent("windXSlider")
-          .input(() => { windX = windXSl.value(); select("#windXVal").html(nf(windX, 1, 2)); });
-        select("#windXVal").html(nf(windX, 1, 2));
-      
-        const windYSl = createSlider(-1, 1, 0, 0.01)
-          .parent("windYSlider")
-          .input(() => { windY = windYSl.value(); select("#windYVal").html(nf(windY, 1, 2)); });
-        select("#windYVal").html(nf(windY, 1, 2));
-      
-        const windZSl = createSlider(-1, 1, 0.1, 0.01)
-          .parent("windZSlider")
-          .input(() => { windZ = windZSl.value(); select("#windZVal").html(nf(windZ, 1, 2)); });
-        select("#windZVal").html(nf(windZ, 1, 2));
-      
-        const windBufSl = createSlider(0, 2, 1.0, 0.01)
-          .parent("windBufSlider")
-          .input(() => { windBuffer = windBufSl.value(); select("#windBufVal").html(nf(windBuffer, 1, 2)); });
-        select("#windBufVal").html(nf(windBuffer, 1, 2));
-      
-        // Gravity slider
-        const gravSl = createSlider(0, 1, 0.4, 0.01)
-          .parent("gravitySlider")
-          .input(() => { gravity = gravSl.value(); select("#gravityVal").html(nf(gravity, 1, 2)); });
-        select("#gravityVal").html(nf(gravity, 1, 2));
-      
-        // Shading toggle (kept as before)
-        const shadingToggle = select("#shadingToggle");
-        shadingToggle.changed(() => { shadingMode = shadingToggle.elt.checked; });
-      }
+      /* =========================
+         Setup the Cloth
+         ========================= */
       
       function setupCloth() {
         clothPoints = [];
@@ -421,7 +455,7 @@
       
         let clothWidth = (cols - 1) * spacing;
         let clothHeight = (rows - 1) * spacing;
-        // Place cloth centered in WEBGL space
+        // Place cloth near center in WEBGL space
         let startX = -clothWidth/2 + clothShiftX;
         let startY = -clothHeight/2;
       
@@ -603,6 +637,10 @@
         }
       }
       
+      /* =========================
+         Simulation Update
+         ========================= */
+      
       function addConstraint(i, j, len) {
         let a = min(i, j);
         let b = max(i, j);
@@ -622,32 +660,34 @@
       }
       
       function updateCloth() {
-        // 3D Verlet integration with oscillatory wind
         let freq = 0.01;
         for (let p of clothPoints) {
           if (!p.pinned) {
-            let vx = (p.x - p.oldx) * damping;
-            let vy = (p.y - p.oldy) * damping;
-            let vz = (p.z - p.oldz) * damping;
+            // Current or baseline
+            let effDamping = dampingOn ? damping : BASE_DAMPING;
+            let vx = (p.x - p.oldx) * effDamping;
+            let vy = (p.y - p.oldy) * effDamping;
+            let vz = (p.z - p.oldz) * effDamping;
+            
             p.oldx = p.x;
             p.oldy = p.y;
             p.oldz = p.z;
+            
             let sinVal = sin(frameCount * freq);
-            let effectiveWindX = windOn ? windBuffer * windX * sinVal : BASE_WINDX;
-            let effectiveWindY = windOn ? windBuffer * windY * sinVal : BASE_WINDY;
-            let effectiveWindZ = windOn ? windBuffer * windZ * sinVal : BASE_WINDZ;
-            let effectiveDamping = dampingOn ? damping : BASE_DAMPING;
-            let effectiveGravity = gravityOn ? gravity : BASE_GRAVITY;
-            let effectiveWeight = weightOn ? weight : BASE_WEIGHT;
-            p.x += vx + effectiveWindX;
-            p.y += vy + effectiveGravity * effectiveWeight + effectiveWindY;
-            p.z += vz + effectiveWindZ;
+            let effWindX = windOn ? (windBuffer * windX * sinVal) : BASE_WINDX;
+            let effWindY = windOn ? (windBuffer * windY * sinVal) : BASE_WINDY;
+            let effWindZ = windOn ? (windBuffer * windZ * sinVal) : BASE_WINDZ;
+            let effGravity = gravityOn ? gravity : BASE_GRAVITY;
+            let effWeight = weightOn ? weight : BASE_WEIGHT;
+            
+            p.x += vx + effWindX;
+            p.y += vy + effGravity * effWeight + effWindY;
+            p.z += vz + effWindZ;
           }
         }
-      
-        // Constraint relaxation
-        let effectiveIterations = iterationsOn ? iterations : BASE_ITERATIONS;
-        for (let i = 0; i < effectiveIterations; i++) {
+        
+        let effIterations = iterationsOn ? iterations : BASE_ITERATIONS;
+        for (let i = 0; i < effIterations; i++) {
           for (let c of clothConstraints) {
             let p1 = clothPoints[c.p1];
             let p2 = clothPoints[c.p2];
@@ -671,7 +711,6 @@
             }
           }
         }
-      
         doSelfCollision();
       }
       
@@ -686,7 +725,7 @@
             let d = sqrt(dx*dx + dy*dy + dz*dz);
             if (d < collisionThreshold && d > 0) {
               let overlap = collisionThreshold - d;
-              let angle = atan2(dy, dx);
+              let angle = atan2(dy, dx); // partial approach
               if (!p1.pinned && !p2.pinned) {
                 p1.x -= cos(angle)*overlap*repulsionFactor*0.5;
                 p1.y -= sin(angle)*overlap*repulsionFactor*0.5;
@@ -704,21 +743,23 @@
         }
       }
       
+      /* =========================
+         Main Draw Loop
+         ========================= */
+      
       function draw() {
         background(30);
-      
         if (doResetOrientation) {
           camera(0, 0, (height/2) / tan(PI*30.0/180),
                  0, 0, 0,
                  0, 1, 0);
           doResetOrientation = false;
         }
-      
         orbitControl();
         updateCloth();
-      
+        
         if (shadingMode) {
-          // Simple shading based on average y of grid corners
+          // Simple shading based on average y
           let minY = Infinity, maxY = -Infinity;
           for (let y = 0; y < rows; y++) {
             for (let x = 0; x < cols; x++) {
@@ -746,8 +787,7 @@
             }
           }
         }
-      
-        // Draw wireframe constraints
+        
         stroke(255);
         strokeWeight(2);
         for (let c of clothConstraints) {
@@ -755,8 +795,7 @@
           let p2 = clothPoints[c.p2];
           line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
         }
-      
-        // Draw cloth points as small spheres
+        
         noStroke();
         fill(255, 0, 0);
         for (let p of clothPoints) {
