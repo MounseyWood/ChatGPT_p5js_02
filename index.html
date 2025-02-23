@@ -2,11 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>3D Cloth Simulation – Persistent Wind & Reset Orientation</title>
-    <!-- Load p5.js from CDN -->
+    <title>3D Cloth Simulation – Advanced Educational UI</title>
+    <!-- Load p5.js -->
     <script src="https://cdn.jsdelivr.net/npm/p5@1.5.0/lib/p5.min.js"></script>
     <style>
-      /* Basic styling for layout and UI panel */
+      /* Global Styles */
       body, html {
         margin: 0;
         padding: 0;
@@ -15,6 +15,7 @@
         font-family: sans-serif;
         height: 100%;
       }
+      /* UI Panel */
       #uiPanel {
         position: absolute;
         top: 0;
@@ -27,6 +28,7 @@
         box-sizing: border-box;
         overflow-y: auto;
       }
+      /* Canvas Container */
       #canvasContainer {
         position: absolute;
         top: 0;
@@ -43,36 +45,59 @@
         line-height: 1.4em;
         margin-bottom: 8px;
       }
-      .sliderLabel {
-        display: block;
-        margin-top: 12px;
+      /* Each parameter container */
+      .parameter {
+        margin-bottom: 12px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 8px;
       }
-      button {
+      .paramHeader {
+        display: flex;
+        align-items: center;
+      }
+      .toggleButton {
+        width: 24px;
+        height: 24px;
+        margin-right: 6px;
+        background: #444;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 24px;
+      }
+      .paramLabel {
+        flex-grow: 1;
+      }
+      .paramDesc {
+        font-size: 12px;
+        color: #aaa;
+        margin-top: 4px;
+      }
+      /* Container for the slider and description for each parameter */
+      .paramContainer {
+        margin-top: 4px;
+      }
+      /* Sticky buttons at the bottom */
+      .bottomButtons {
+        position: sticky;
+        bottom: 20px;
+        width: 100%;
+      }
+      /* Reset Orientation and Reset Cloth buttons */
+      #resetOrientationBtn, #resetBtn {
+        width: 100%;
         padding: 8px 12px;
         background: #555;
         color: #fff;
         border: none;
         cursor: pointer;
         margin-bottom: 10px;
-        width: 100%;
       }
-      button:hover {
+      #resetOrientationBtn:hover, #resetBtn:hover {
         background: #666;
       }
-      /* The two sticky buttons at the bottom */
-      #resetOrientationBtn {
-        position: sticky;
-        bottom: 60px; /* a bit higher so it sits above the Reset Cloth button */
-      }
-      #resetBtn {
-        position: sticky;
-        bottom: 20px;
-      }
-      /* For the pinning mode radio buttons */
-      #pinningRadio {
-        margin-top: 12px;
-      }
-      /* Shading toggle label */
+      /* Shading toggle styling */
       #shadingToggleLabel {
         display: block;
         margin-top: 12px;
@@ -81,69 +106,174 @@
     </style>
   </head>
   <body>
+    <!-- UI Panel -->
     <div id="uiPanel">
       <h2>3D Cloth Simulation</h2>
       <p>
-        Touch/click on the cloth (in the canvas) to drag points (not implemented in 3D).
-        Adjust the sliders to change parameters.
+        Touch/click on the cloth (in the canvas) to drag points (3D dragging not implemented).
+        Adjust the controls below.
       </p>
 
-      <!-- Pinning Mode radio buttons -->
-      <label class="sliderLabel">Pinning Mode:</label>
-      <div id="pinningRadio"></div>
+      <!-- Pinning Mode -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <span class="paramLabel">Pinning Mode:</span>
+        </div>
+        <div id="pinningRadio"></div>
+        <div class="paramDesc">Choose whether the cloth is pinned along the top edge or only at its corners.</div>
+      </div>
 
-      <label class="sliderLabel">Damping: <span id="dampingVal"></span></label>
-      <div id="dampingSlider"></div>
+      <!-- Damping -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('dampingContainer', this)">–</button>
+          <span class="paramLabel">Damping: <span id="dampingVal"></span></span>
+        </div>
+        <div id="dampingContainer" class="paramContainer">
+          <div id="dampingSlider"></div>
+          <div class="paramDesc">Controls energy loss (smooths motion).</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Iterations: <span id="iterationsVal"></span></label>
-      <div id="iterationsSlider"></div>
+      <!-- Iterations -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('iterationsContainer', this)">–</button>
+          <span class="paramLabel">Iterations: <span id="iterationsVal"></span></span>
+        </div>
+        <div id="iterationsContainer" class="paramContainer">
+          <div id="iterationsSlider"></div>
+          <div class="paramDesc">Number of constraint relaxations per frame.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Stretch: <span id="stretchVal"></span></label>
-      <div id="stretchSlider"></div>
+      <!-- Stretch -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('stretchContainer', this)">–</button>
+          <span class="paramLabel">Stretch: <span id="stretchVal"></span></span>
+        </div>
+        <div id="stretchContainer" class="paramContainer">
+          <div id="stretchSlider"></div>
+          <div class="paramDesc">Affects how much the cloth can extend.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Shear: <span id="shearVal"></span></label>
-      <div id="shearSlider"></div>
+      <!-- Shear -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('shearContainer', this)">–</button>
+          <span class="paramLabel">Shear: <span id="shearVal"></span></span>
+        </div>
+        <div id="shearContainer" class="paramContainer">
+          <div id="shearSlider"></div>
+          <div class="paramDesc">Resists diagonal distortion.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Bending: <span id="bendingVal"></span></label>
-      <div id="bendingSlider"></div>
+      <!-- Bending -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('bendingContainer', this)">–</button>
+          <span class="paramLabel">Bending: <span id="bendingVal"></span></span>
+        </div>
+        <div id="bendingContainer" class="paramContainer">
+          <div id="bendingSlider"></div>
+          <div class="paramDesc">Controls resistance to sharp folds.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Weight: <span id="weightVal"></span></label>
-      <div id="weightSlider"></div>
+      <!-- Weight -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('weightContainer', this)">–</button>
+          <span class="paramLabel">Weight: <span id="weightVal"></span></span>
+        </div>
+        <div id="weightContainer" class="paramContainer">
+          <div id="weightSlider"></div>
+          <div class="paramDesc">Modifies the downward pull on the cloth.</div>
+        </div>
+      </div>
 
-      <!-- Wind vector sliders -->
-      <label class="sliderLabel">Wind X: <span id="windXVal"></span></label>
-      <div id="windXSlider"></div>
+      <!-- Wind X -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('windXContainer', this)">–</button>
+          <span class="paramLabel">Wind X: <span id="windXVal"></span></span>
+        </div>
+        <div id="windXContainer" class="paramContainer">
+          <div id="windXSlider"></div>
+          <div class="paramDesc">Wind force along the X-axis.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Wind Y: <span id="windYVal"></span></label>
-      <div id="windYSlider"></div>
+      <!-- Wind Y -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('windYContainer', this)">–</button>
+          <span class="paramLabel">Wind Y: <span id="windYVal"></span></span>
+        </div>
+        <div id="windYContainer" class="paramContainer">
+          <div id="windYSlider"></div>
+          <div class="paramDesc">Wind force along the Y-axis.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Wind Z: <span id="windZVal"></span></label>
-      <div id="windZSlider"></div>
+      <!-- Wind Z -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('windZContainer', this)">–</button>
+          <span class="paramLabel">Wind Z: <span id="windZVal"></span></span>
+        </div>
+        <div id="windZContainer" class="paramContainer">
+          <div id="windZSlider"></div>
+          <div class="paramDesc">Wind force along the Z-axis.</div>
+        </div>
+      </div>
 
-      <!-- Wind Buffer slider -->
-      <label class="sliderLabel">Wind Buffer: <span id="windBufVal"></span></label>
-      <div id="windBufSlider"></div>
+      <!-- Wind Buffer -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('windBufContainer', this)">–</button>
+          <span class="paramLabel">Wind Buffer: <span id="windBufVal"></span></span>
+        </div>
+        <div id="windBufContainer" class="paramContainer">
+          <div id="windBufSlider"></div>
+          <div class="paramDesc">Scales overall wind oscillation amplitude.</div>
+        </div>
+      </div>
 
-      <label class="sliderLabel">Gravity: <span id="gravityVal"></span></label>
-      <div id="gravitySlider"></div>
+      <!-- Gravity -->
+      <div class="parameter">
+        <div class="paramHeader">
+          <button class="toggleButton" onclick="toggleParam('gravityContainer', this)">–</button>
+          <span class="paramLabel">Gravity: <span id="gravityVal"></span></span>
+        </div>
+        <div id="gravityContainer" class="paramContainer">
+          <div id="gravitySlider"></div>
+          <div class="paramDesc">Sets the base downward acceleration.</div>
+        </div>
+      </div>
 
+      <!-- Shading Toggle -->
       <label id="shadingToggleLabel">
         <input type="checkbox" id="shadingToggle" /> Shading Mode
       </label>
 
       <p id="eduText">
         <strong>Simulation Attributes:</strong><br>
-        • <strong>Damping:</strong> Controls energy loss (smooth motion).<br>
-        • <strong>Iterations:</strong> Number of constraint relaxations per frame.<br>
-        • <strong>Stretch / Shear / Bending:</strong> Distortion constraints.<br>
-        • <strong>Weight / Gravity:</strong> Downward pull on the cloth.<br>
-        • <strong>Wind (X,Y,Z):</strong> 3D wind vector.<br>
-        • <strong>Wind Buffer:</strong> A single multiplier for wind amplitude. Higher = stronger oscillations.<br>
-        • <strong>Shading Mode:</strong> When enabled, each cell is filled with a gray‑scale color based on its vertical position.<br>
-        • <strong>Pinning Mode:</strong> “Top” or “Corners.”
+        • Damping: Energy loss (smooths motion).<br>
+        • Iterations: Constraint relaxations per frame.<br>
+        • Stretch: Cloth extension capability.<br>
+        • Shear: Resistance to diagonal distortion.<br>
+        • Bending: Resistance to sharp folds.<br>
+        • Weight & Gravity: Downward pull on the cloth.<br>
+        • Wind (X, Y, Z): 3D wind vector.<br>
+        • Wind Buffer: Scales wind oscillation amplitude.<br>
+        • Shading Mode: Fills cells with a gray‑scale color based on vertical position.<br>
+        • Pinning Mode: “Top” vs. “Corners.”
       </p>
 
-      <!-- Sticky Buttons -->
       <button id="resetOrientationBtn">Reset Orientation</button>
       <button id="resetBtn">Reset Cloth</button>
     </div>
@@ -151,173 +281,145 @@
     <div id="canvasContainer"></div>
 
     <script>
-      // Basic cloth configuration
+      // Global cloth configuration
       let cols = 20, rows = 20, spacing = 20;
 
-      // Arrays for points & constraints
       let clothPoints = [], clothConstraints = [];
       let grid = [], horizontal = [], vertical = [], centers = [];
 
-      // Simulation parameters
+      // Simulation parameters (default values)
       let damping = 0.98;
       let iterations = 5;
       let stretchFactor = 1.0;
       let shearFactor = 1.0;
       let bendingFactor = 1.0;
       let weight = 1.0;
-      let windX = 0.2, windY = 0, windZ = 0.1;
-      let windBuffer = 1.0; // new multiplier
+      let windX = 0.2, windY = 0.0, windZ = 0.1;
+      let windBuffer = 1.0;
       let gravity = 0.4;
 
       // Collision parameters
       let collisionThreshold = spacing * 0.5;
       let repulsionFactor = 0.5;
 
-      // Shading toggle
-      let shadingMode = false;
+      // For dragging points (3D dragging not implemented)
+      let dragPointIndex = null;
 
-      // Pinning mode: "top" or "corners"
-      let pinningMode = "top";
-
-      // We'll shift the cloth horizontally a bit in 3D
+      // Horizontal shift for cloth position
       let clothShiftX = -40;
 
-      // We'll track whether to reset orientation
+      // Toggle for shading mode
+      let shadingMode = false;
+
+      // Pinning mode: "top" or "corners" (default "top")
+      let pinningMode = "top";
+
+      // Flag for resetting orientation
       let doResetOrientation = false;
 
       function setup() {
-        // Create a WEBGL canvas to the right of the UI panel
         let cnv = createCanvas(windowWidth - 280, windowHeight, WEBGL);
         cnv.parent("canvasContainer");
         cnv.style("display", "block");
-
         createUI();
         setupCloth();
       }
 
+      // Toggle function for parameter containers
+      function toggleParam(containerId, btn) {
+        let container = document.getElementById(containerId);
+        if (container.style.display === "none") {
+          container.style.display = "block";
+          btn.textContent = "–";
+        } else {
+          container.style.display = "none";
+          btn.textContent = "+";
+        }
+      }
+
       function createUI() {
-        // Reset cloth
+        // Reset Cloth button
         select("#resetBtn").mousePressed(setupCloth);
+        // Reset Orientation button
+        select("#resetOrientationBtn").mousePressed(() => { doResetOrientation = true; });
 
-        // Reset orientation
-        select("#resetOrientationBtn").mousePressed(() => {
-          doResetOrientation = true;
-        });
-
-        // Pinning mode radio
+        // Pinning mode radio buttons
         let pinRadio = createRadio();
         pinRadio.option("top", "Top Pinned");
         pinRadio.option("corners", "Corner Pinned");
         pinRadio.selected("top");
         pinRadio.parent("pinningRadio");
-        pinRadio.changed(() => {
-          pinningMode = pinRadio.value();
-        });
+        pinRadio.changed(() => { pinningMode = pinRadio.value(); });
 
         // Damping slider
         const dampingSl = createSlider(0.90, 1.0, 0.98, 0.01)
           .parent("dampingSlider")
-          .input(() => {
-            damping = dampingSl.value();
-            select("#dampingVal").html(nf(damping, 1, 2));
-          });
+          .input(() => { damping = dampingSl.value(); select("#dampingVal").html(nf(damping, 1, 2)); });
         select("#dampingVal").html(nf(damping, 1, 2));
 
         // Iterations slider
         const iterSl = createSlider(1, 10, 5, 1)
           .parent("iterationsSlider")
-          .input(() => {
-            iterations = iterSl.value();
-            select("#iterationsVal").html(iterations);
-          });
+          .input(() => { iterations = iterSl.value(); select("#iterationsVal").html(iterations); });
         select("#iterationsVal").html(iterations);
 
         // Stretch slider
         const stretchSl = createSlider(0.8, 1.2, 1.0, 0.01)
           .parent("stretchSlider")
-          .input(() => {
-            stretchFactor = stretchSl.value();
-            select("#stretchVal").html(nf(stretchFactor, 1, 2));
-          });
+          .input(() => { stretchFactor = stretchSl.value(); select("#stretchVal").html(nf(stretchFactor, 1, 2)); });
         select("#stretchVal").html(nf(stretchFactor, 1, 2));
 
         // Shear slider
         const shearSl = createSlider(0.8, 1.2, 1.0, 0.01)
           .parent("shearSlider")
-          .input(() => {
-            shearFactor = shearSl.value();
-            select("#shearVal").html(nf(shearFactor, 1, 2));
-          });
+          .input(() => { shearFactor = shearSl.value(); select("#shearVal").html(nf(shearFactor, 1, 2)); });
         select("#shearVal").html(nf(shearFactor, 1, 2));
 
         // Bending slider
         const bendSl = createSlider(0.8, 1.2, 1.0, 0.01)
           .parent("bendingSlider")
-          .input(() => {
-            bendingFactor = bendSl.value();
-            select("#bendingVal").html(nf(bendingFactor, 1, 2));
-          });
+          .input(() => { bendingFactor = bendSl.value(); select("#bendingVal").html(nf(bendingFactor, 1, 2)); });
         select("#bendingVal").html(nf(bendingFactor, 1, 2));
 
         // Weight slider
         const weightSl = createSlider(0.5, 2.0, 1.0, 0.1)
           .parent("weightSlider")
-          .input(() => {
-            weight = weightSl.value();
-            select("#weightVal").html(nf(weight, 1, 2));
-          });
+          .input(() => { weight = weightSl.value(); select("#weightVal").html(nf(weight, 1, 2)); });
         select("#weightVal").html(nf(weight, 1, 2));
 
-        // Wind X
+        // Wind X slider
         const windXSl = createSlider(-1, 1, 0.2, 0.01)
           .parent("windXSlider")
-          .input(() => {
-            windX = windXSl.value();
-            select("#windXVal").html(nf(windX, 1, 2));
-          });
+          .input(() => { windX = windXSl.value(); select("#windXVal").html(nf(windX, 1, 2)); });
         select("#windXVal").html(nf(windX, 1, 2));
 
-        // Wind Y
+        // Wind Y slider
         const windYSl = createSlider(-1, 1, 0, 0.01)
           .parent("windYSlider")
-          .input(() => {
-            windY = windYSl.value();
-            select("#windYVal").html(nf(windY, 1, 2));
-          });
+          .input(() => { windY = windYSl.value(); select("#windYVal").html(nf(windY, 1, 2)); });
         select("#windYVal").html(nf(windY, 1, 2));
 
-        // Wind Z
+        // Wind Z slider
         const windZSl = createSlider(-1, 1, 0.1, 0.01)
           .parent("windZSlider")
-          .input(() => {
-            windZ = windZSl.value();
-            select("#windZVal").html(nf(windZ, 1, 2));
-          });
+          .input(() => { windZ = windZSl.value(); select("#windZVal").html(nf(windZ, 1, 2)); });
         select("#windZVal").html(nf(windZ, 1, 2));
 
-        // Wind Buffer
+        // Wind Buffer slider
         const windBufSl = createSlider(0, 2, 1.0, 0.01)
           .parent("windBufSlider")
-          .input(() => {
-            windBuffer = windBufSl.value();
-            select("#windBufVal").html(nf(windBuffer, 1, 2));
-          });
+          .input(() => { windBuffer = windBufSl.value(); select("#windBufVal").html(nf(windBuffer, 1, 2)); });
         select("#windBufVal").html(nf(windBuffer, 1, 2));
 
-        // Gravity
+        // Gravity slider
         const gravSl = createSlider(0, 1, 0.4, 0.01)
           .parent("gravitySlider")
-          .input(() => {
-            gravity = gravSl.value();
-            select("#gravityVal").html(nf(gravity, 1, 2));
-          });
+          .input(() => { gravity = gravSl.value(); select("#gravityVal").html(nf(gravity, 1, 2)); });
         select("#gravityVal").html(nf(gravity, 1, 2));
 
         // Shading toggle
         const shadingToggle = select("#shadingToggle");
-        shadingToggle.changed(() => {
-          shadingMode = shadingToggle.elt.checked;
-        });
+        shadingToggle.changed(() => { shadingMode = shadingToggle.elt.checked; });
       }
 
       function setupCloth() {
@@ -350,7 +452,7 @@
                         (x === 0 && y === rows-1) ||
                         (x === cols-1 && y === rows-1));
             }
-            clothPoints.push({ 
+            clothPoints.push({
               x: px, y: py, z: pz,
               oldx: px, oldy: py, oldz: pz,
               pinned: pinned
@@ -531,9 +633,8 @@
       }
 
       function updateCloth() {
-        // 3D Verlet integration with an oscillatory wind to keep the cloth moving
-        // We'll add a time-based sine factor so the cloth doesn't settle
-        let freq = 0.01; // frequency for the sine wave
+        // 3D Verlet integration with oscillatory wind using windBuffer
+        let freq = 0.01;
         for (let p of clothPoints) {
           if (!p.pinned) {
             let vx = (p.x - p.oldx) * damping;
@@ -542,22 +643,16 @@
             p.oldx = p.x;
             p.oldy = p.y;
             p.oldz = p.z;
-
-            // Use sin(frameCount*freq) for oscillation
             let sinVal = sin(frameCount * freq);
-
-            // Scale wind by windBuffer * sinVal
             let windAmpX = windBuffer * windX * sinVal;
             let windAmpY = windBuffer * windY * sinVal;
             let windAmpZ = windBuffer * windZ * sinVal;
-
             p.x += vx + windAmpX;
             p.y += vy + gravity * weight + windAmpY;
             p.z += vz + windAmpZ;
           }
         }
-
-        // Constraint relaxation
+        // Constraint relaxation in 3D
         for (let i = 0; i < iterations; i++) {
           for (let c of clothConstraints) {
             let p1 = clothPoints[c.p1];
@@ -596,8 +691,7 @@
             let d = sqrt(dx*dx + dy*dy + dz*dz);
             if (d < collisionThreshold && d > 0) {
               let overlap = collisionThreshold - d;
-              // Partial approach: separate them in 2D
-              let angle = atan2(dy, dx);
+              let angle = atan2(dy, dx); // Approximate in 2D for collision separation
               if (!p1.pinned && !p2.pinned) {
                 p1.x -= cos(angle)*overlap*repulsionFactor*0.5;
                 p1.y -= sin(angle)*overlap*repulsionFactor*0.5;
@@ -617,20 +711,16 @@
 
       function draw() {
         background(30);
-
-        // If user clicked "Reset Orientation," set a default camera
         if (doResetOrientation) {
           camera(0, 0, (height/2) / tan(PI*30.0/180),
                  0, 0, 0,
                  0, 1, 0);
           doResetOrientation = false;
         }
-
         orbitControl();
         updateCloth();
-
         if (shadingMode) {
-          // Simple shading based on avg y
+          // Simple gray-scale shading based on average y of grid corners
           let minY = Infinity, maxY = -Infinity;
           for (let y = 0; y < rows; y++) {
             for (let x = 0; x < cols; x++) {
@@ -658,8 +748,6 @@
             }
           }
         }
-
-        // Wireframe constraints
         stroke(255);
         strokeWeight(2);
         for (let c of clothConstraints) {
@@ -667,8 +755,6 @@
           let p2 = clothPoints[c.p2];
           line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
         }
-
-        // Points
         noStroke();
         fill(255, 0, 0);
         for (let p of clothPoints) {
@@ -680,7 +766,7 @@
       }
 
       function mousePressed() {
-        // Not implemented for 3D dragging
+        // 3D dragging not implemented
       }
 
       function windowResized() {
