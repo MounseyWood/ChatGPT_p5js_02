@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>3D Cloth Simulation – Reset Orientation & Wind Buffer</title>
+    <title>3D Cloth Simulation – Persistent Wind & Reset Orientation</title>
     <!-- Load p5.js from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/p5@1.5.0/lib/p5.min.js"></script>
     <style>
@@ -17,8 +17,10 @@
       }
       #uiPanel {
         position: absolute;
-        top: 0; left: 0;
-        width: 280px; height: 100%;
+        top: 0;
+        left: 0;
+        width: 280px;
+        height: 100%;
         background: #222;
         box-shadow: 2px 0 8px rgba(0,0,0,0.5);
         padding: 20px;
@@ -27,7 +29,8 @@
       }
       #canvasContainer {
         position: absolute;
-        top: 0; left: 280px;
+        top: 0;
+        left: 280px;
         width: calc(100% - 280px);
         height: 100%;
         overflow: hidden;
@@ -36,7 +39,8 @@
         margin-top: 0;
       }
       p, label {
-        font-size: 14px; line-height: 1.4em;
+        font-size: 14px;
+        line-height: 1.4em;
         margin-bottom: 8px;
       }
       .sliderLabel {
@@ -50,15 +54,19 @@
         border: none;
         cursor: pointer;
         margin-bottom: 10px;
+        width: 100%;
       }
       button:hover {
         background: #666;
       }
-      /* Make the Reset Cloth button stick to the bottom */
+      /* The two sticky buttons at the bottom */
+      #resetOrientationBtn {
+        position: sticky;
+        bottom: 60px; /* a bit higher so it sits above the Reset Cloth button */
+      }
       #resetBtn {
         position: sticky;
         bottom: 20px;
-        width: 100%;
       }
       /* For the pinning mode radio buttons */
       #pinningRadio {
@@ -73,7 +81,6 @@
     </style>
   </head>
   <body>
-    <!-- Side Panel for UI -->
     <div id="uiPanel">
       <h2>3D Cloth Simulation</h2>
       <p>
@@ -113,7 +120,7 @@
       <label class="sliderLabel">Wind Z: <span id="windZVal"></span></label>
       <div id="windZSlider"></div>
 
-      <!-- NEW: Wind Buffer slider -->
+      <!-- Wind Buffer slider -->
       <label class="sliderLabel">Wind Buffer: <span id="windBufVal"></span></label>
       <div id="windBufSlider"></div>
 
@@ -131,18 +138,16 @@
         • <strong>Stretch / Shear / Bending:</strong> Distortion constraints.<br>
         • <strong>Weight / Gravity:</strong> Downward pull on the cloth.<br>
         • <strong>Wind (X,Y,Z):</strong> 3D wind vector.<br>
-        • <strong>Wind Buffer:</strong> A single multiplier for the entire wind vector.<br>
+        • <strong>Wind Buffer:</strong> A single multiplier for wind amplitude. Higher = stronger oscillations.<br>
         • <strong>Shading Mode:</strong> When enabled, each cell is filled with a gray‑scale color based on its vertical position.<br>
         • <strong>Pinning Mode:</strong> “Top” or “Corners.”
       </p>
 
-      <!-- NEW: Reset Orientation button -->
+      <!-- Sticky Buttons -->
       <button id="resetOrientationBtn">Reset Orientation</button>
-
       <button id="resetBtn">Reset Cloth</button>
     </div>
 
-    <!-- The main canvas container -->
     <div id="canvasContainer"></div>
 
     <script>
@@ -161,7 +166,7 @@
       let bendingFactor = 1.0;
       let weight = 1.0;
       let windX = 0.2, windY = 0, windZ = 0.1;
-      let windBuffer = 1.0; // NEW wind multiplier
+      let windBuffer = 1.0; // new multiplier
       let gravity = 0.4;
 
       // Collision parameters
@@ -181,6 +186,7 @@
       let doResetOrientation = false;
 
       function setup() {
+        // Create a WEBGL canvas to the right of the UI panel
         let cnv = createCanvas(windowWidth - 280, windowHeight, WEBGL);
         cnv.parent("canvasContainer");
         cnv.style("display", "block");
@@ -190,10 +196,10 @@
       }
 
       function createUI() {
-        // Button to reset the cloth
+        // Reset cloth
         select("#resetBtn").mousePressed(setupCloth);
 
-        // Button to reset orientation
+        // Reset orientation
         select("#resetOrientationBtn").mousePressed(() => {
           doResetOrientation = true;
         });
@@ -289,7 +295,7 @@
           });
         select("#windZVal").html(nf(windZ, 1, 2));
 
-        // NEW: Wind Buffer
+        // Wind Buffer
         const windBufSl = createSlider(0, 2, 1.0, 0.01)
           .parent("windBufSlider")
           .input(() => {
@@ -525,7 +531,9 @@
       }
 
       function updateCloth() {
-        // 3D Verlet integration with wind & gravity, using windBuffer
+        // 3D Verlet integration with an oscillatory wind to keep the cloth moving
+        // We'll add a time-based sine factor so the cloth doesn't settle
+        let freq = 0.01; // frequency for the sine wave
         for (let p of clothPoints) {
           if (!p.pinned) {
             let vx = (p.x - p.oldx) * damping;
@@ -535,10 +543,17 @@
             p.oldy = p.y;
             p.oldz = p.z;
 
-            // Multiply windX/Y/Z by windBuffer
-            p.x += vx + windBuffer * windX;
-            p.y += vy + gravity * weight + windBuffer * windY;
-            p.z += vz + windBuffer * windZ;
+            // Use sin(frameCount*freq) for oscillation
+            let sinVal = sin(frameCount * freq);
+
+            // Scale wind by windBuffer * sinVal
+            let windAmpX = windBuffer * windX * sinVal;
+            let windAmpY = windBuffer * windY * sinVal;
+            let windAmpZ = windBuffer * windZ * sinVal;
+
+            p.x += vx + windAmpX;
+            p.y += vy + gravity * weight + windAmpY;
+            p.z += vz + windAmpZ;
           }
         }
 
@@ -581,8 +596,7 @@
             let d = sqrt(dx*dx + dy*dy + dz*dz);
             if (d < collisionThreshold && d > 0) {
               let overlap = collisionThreshold - d;
-              // For a full 3D approach, separate them along (dx, dy, dz).
-              // This partial approach uses 2D angle for demonstration:
+              // Partial approach: separate them in 2D
               let angle = atan2(dy, dx);
               if (!p1.pinned && !p2.pinned) {
                 p1.x -= cos(angle)*overlap*repulsionFactor*0.5;
@@ -604,7 +618,7 @@
       function draw() {
         background(30);
 
-        // If user clicked "Reset Orientation," we set a default camera
+        // If user clicked "Reset Orientation," set a default camera
         if (doResetOrientation) {
           camera(0, 0, (height/2) / tan(PI*30.0/180),
                  0, 0, 0,
@@ -612,7 +626,6 @@
           doResetOrientation = false;
         }
 
-        // orbitControl() for mouse rotation
         orbitControl();
         updateCloth();
 
@@ -646,7 +659,7 @@
           }
         }
 
-        // Draw wireframe constraints
+        // Wireframe constraints
         stroke(255);
         strokeWeight(2);
         for (let c of clothConstraints) {
@@ -655,7 +668,7 @@
           line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
         }
 
-        // Draw cloth points as small spheres
+        // Points
         noStroke();
         fill(255, 0, 0);
         for (let p of clothPoints) {
