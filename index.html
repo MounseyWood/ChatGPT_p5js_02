@@ -318,8 +318,8 @@
         let clothWidth = (cols - 1) * spacing;
         let clothHeight = (rows - 1) * spacing;
         let startX = (canvasW - clothWidth) / -5 + clothShiftX;
-        let startY = (canvasH - clothHeight) / -8;
-        if (startY < 50) startY = 50;
+        let startY = (canvasH - clothHeight) / -5;
+        if (startY < 50) startY = 30;
         
         // 1. Create grid corner points with pinning according to mode
         for (let y = 0; y < rows; y++) {
