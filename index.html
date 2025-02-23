@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3D Cloth Simulation with 3D Wind Control</title>
+    <!-- p5.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.5.0/lib/p5.min.js"></script>
+    <style>
+      body, html {
+        margin: 0;
+        padding: 0;
+        background: #111;
+        color: #fff;
+        font-family: sans-serif;
+        height: 100%;
+      }
+      /* Side panel for UI */
+      #uiPanel {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 280px;
+        height: 100%;
+        background: #222;
+        box-shadow: 2px 0 8px rgba(0,0,0,0.5);
+        padding: 20px;
+        box-sizing: border-box;
+        overflow-y: auto;
+      }
+      /* Canvas container */
+      #canvasContainer {
+        position: absolute;
+        top: 0;
+        left: 280px;
+        width: calc(100% - 280px);
+        height: 100%;
+        overflow: hidden;
+      }
+      h2 {
+        margin-top: 0;
+      }
+      p, label {
+        font-size: 14px;
+        line-height: 1.4em;
+        margin-bottom: 8px;
+      }
+      .sliderLabel {
+        display: block;
+        margin-top: 12px;
+      }
+      button {
+        padding: 8px 12px;
+        background: #555;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        margin-bottom: 10px;
+      }
+      button:hover {
+        background: #666;
+      }
+      /* Make the Reset button stick to the bottom of the panel */
+      #resetBtn {
+        position: sticky;
+        bottom: 20px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Side Panel for UI -->
+    <div id="uiPanel">
+      <h2>3D Cloth Simulation</h2>
+      <p>
+        Drag points (if you add mouse interaction) and adjust the wind vector below.
+      </p>
+      
+      <label class="sliderLabel">Wind X: <span id="windXVal"></span></label>
+      <div id="windXSlider"></div>
+      
+      <label class="sliderLabel">Wind Y: <span id="windYVal"></span></label>
+      <div id="windYSlider"></div>
+      
+      <label class="sliderLabel">Wind Z: <span id="windZVal"></span></label>
+      <div id="windZSlider"></div>
+      
+      <label class="sliderLabel">Damping: <span id="dampingVal"></span></label>
+      <div id="dampingSlider"></div>
+      
+      <label class="sliderLabel">Iterations: <span id="iterationsVal"></span></label>
+      <div id="iterationsSlider"></div>
+      
+      <label class="sliderLabel">Gravity: <span id="gravityVal"></span></label>
+      <div id="gravitySlider"></div>
+      
+      <label class="sliderLabel">Weight: <span id="weightVal"></span></label>
+      <div id="weightSlider"></div>
+      
+      <div id="resetBtnContainer" class="bottomButtons">
+        <button id="resetBtn">Reset Cloth</button>
+      </div>
+    </div>
+    
+    <!-- Canvas Container -->
+    <div id="canvasContainer"></div>
+    
+    <script>
+      // 3D cloth parameters
+      let cols = 20, rows = 20, spacing = 20;
+      let clothPoints = [], clothConstraints = [];
+      let grid = [];
+      
+      // Simulation parameters
+      let damping = 0.99;
+      let iterations = 5;
+      let gravity = 0.5;   // Acts along y-axis
+      let weight = 1.0;
+      
+      // Wind vector components
+      let windX = 0.2, windY = 0, windZ = 0.1;
+      
+      // Self-collision (optional in 3D; omitted for simplicity)
+      // For dragging (not implemented here)
+      let dragPointIndex = null;
+      
+      // Horizontal shift so the cloth isn't too far right
+      let clothShiftX = -40;
+      
+      function setup() {
+        let cnv = createCanvas(windowWidth - 280, windowHeight, WEBGL);
+        cnv.parent("canvasContainer");
+        createUI();
+        setupCloth();
+      }
+      
+      function createUI() {
+        // Reset button
+        const resetBtn = select("#resetBtn");
+        resetBtn.mousePressed(setupCloth);
+        
+        // Wind X slider
+        const windXSlider = createSlider(-1, 1, 0.2, 0.01)
+          .parent("windXSlider")
+          .input(() => {
+            windX = windXSlider.value();
+            select("#windXVal").html(nf(windX,1,2));
+          });
+        select("#windXVal").html(nf(windX,1,2));
+        
+        // Wind Y slider
+        const windYSlider = createSlider(-1, 1, 0, 0.01)
+          .parent("windYSlider")
+          .input(() => {
+            windY = windYSlider.value();
+            select("#windYVal").html(nf(windY,1,2));
+          });
+        select("#windYVal").html(nf(windY,1,2));
+        
+        // Wind Z slider
+        const windZSlider = createSlider(-1, 1, 0.1, 0.01)
+          .parent("windZSlider")
+          .input(() => {
+            windZ = windZSlider.value();
+            select("#windZVal").html(nf(windZ,1,2));
+          });
+        select("#windZVal").html(nf(windZ,1,2));
+        
+        // Damping slider
+        const dampingSlider = createSlider(0.90, 1.0, 0.99, 0.01)
+          .parent("dampingSlider")
+          .input(() => {
+            damping = dampingSlider.value();
+            select("#dampingVal").html(nf(damping, 1, 2));
+          });
+        select("#dampingVal").html(nf(damping, 1, 2));
+        
+        // Iterations slider
+        const iterSlider = createSlider(1, 10, 5, 1)
+          .parent("iterationsSlider")
+          .input(() => {
+            iterations = iterSlider.value();
+            select("#iterationsVal").html(iterations);
+          });
+        select("#iterationsVal").html(iterations);
+        
+        // Gravity slider
+        const gravitySlider = createSlider(0, 1, 0.5, 0.01)
+          .parent("gravitySlider")
+          .input(() => {
+            gravity = gravitySlider.value();
+            select("#gravityVal").html(nf(gravity, 1, 2));
+          });
+        select("#gravityVal").html(nf(gravity, 1, 2));
+        
+        // Weight slider
+        const weightSlider = createSlider(0.5, 2.0, 1.0, 0.1)
+          .parent("weightSlider")
+          .input(() => {
+            weight = weightSlider.value();
+            select("#weightVal").html(nf(weight, 1, 2));
+          });
+        select("#weightVal").html(nf(weight, 1, 2));
+      }
+      
+      // Set up a square cloth in 3D (initially flat, z = 0)
+      function setupCloth() {
+        clothPoints = [];
+        clothConstraints = [];
+        grid = [];
+        
+        let canvasW = width;
+        let canvasH = height;
+        let clothWidth = (cols - 1) * spacing;
+        let clothHeight = (rows - 1) * spacing;
+        // Center the cloth in the canvas (note: WEBGL origin is center)
+        let startX = -clothWidth/2 + clothShiftX;
+        let startY = -clothHeight/2;
+        
+        // Create grid of points
+        for (let y = 0; y < rows; y++) {
+          grid[y] = [];
+          for (let x = 0; x < cols; x++) {
+            let px = startX + x * spacing;
+            let py = startY + y * spacing;
+            let pz = 0;  // Initially flat
+            // Pin top row
+            let pinned = (y === 0);
+            clothPoints.push({ x: px, y: py, z: pz, oldx: px, oldy: py, oldz: pz, pinned: pinned });
+            grid[y][x] = clothPoints.length - 1;
+          }
+        }
+        
+        // Structural constraints: connect each point to its right and bottom neighbor
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+            let idx = grid[y][x];
+            if (x < cols - 1) {
+              addConstraint(idx, grid[y][x+1], spacing);
+            }
+            if (y < rows - 1) {
+              addConstraint(idx, grid[y+1][x], spacing);
+            }
+          }
+        }
+      }
+      
+      function addConstraint(i, j, len) {
+        let a = min(i, j);
+        let b = max(i, j);
+        for (let c of clothConstraints) {
+          if (c.p1 === a && c.p2 === b) return;
+        }
+        clothConstraints.push({ p1: a, p2: b, length: len });
+      }
+      
+      function updateCloth() {
+        // Verlet integration in 3D with wind and gravity
+        for (let p of clothPoints) {
+          if (!p.pinned) {
+            let vx = (p.x - p.oldx) * damping;
+            let vy = (p.y - p.oldy) * damping;
+            let vz = (p.z - p.oldz) * damping;
+            p.oldx = p.x;
+            p.oldy = p.y;
+            p.oldz = p.z;
+            // Apply wind vector and gravity (gravity acts along y)
+            p.x += vx + windX;
+            p.y += vy + gravity * weight + windY;
+            p.z += vz + windZ;
+          }
+        }
+        // Constraint relaxation in 3D
+        for (let i = 0; i < iterations; i++) {
+          for (let c of clothConstraints) {
+            let p1 = clothPoints[c.p1];
+            let p2 = clothPoints[c.p2];
+            let dx = p2.x - p1.x;
+            let dy = p2.y - p1.y;
+            let dz = p2.z - p1.z;
+            let distVal = sqrt(dx * dx + dy * dy + dz * dz);
+            let diff = (distVal - c.length) / distVal;
+            let offsetX = dx * 0.5 * diff;
+            let offsetY = dy * 0.5 * diff;
+            let offsetZ = dz * 0.5 * diff;
+            if (!p1.pinned) {
+              p1.x += offsetX;
+              p1.y += offsetY;
+              p1.z += offsetZ;
+            }
+            if (!p2.pinned) {
+              p2.x -= offsetX;
+              p2.y -= offsetY;
+              p2.z -= offsetZ;
+            }
+          }
+        }
+      }
+      
+      function draw() {
+        background(30);
+        // Rotate the view a bit for a 3D perspective
+        orbitControl();
+        updateCloth();
+        // Draw cloth as wireframe (lines) and small spheres at points
+        stroke(255);
+        strokeWeight(2);
+        for (let c of clothConstraints) {
+          let p1 = clothPoints[c.p1];
+          let p2 = clothPoints[c.p2];
+          line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+        }
+        noStroke();
+        fill(255, 0, 0);
+        for (let p of clothPoints) {
+          push();
+          translate(p.x, p.y, p.z);
+          sphere(2);
+          pop();
+        }
+      }
+      
+      function mousePressed() {
+        // (Optional) 3D dragging would require mapping screen coordinates to world coordinates.
+      }
+      
+      function windowResized() {
+        resizeCanvas(windowWidth - 280, windowHeight);
+      }
+    </script>
+  </body>
+</html>
